@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de-CH">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Velo Pixel Ride</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <section id="selection-screen" class="screen active" aria-label="Figur uswahle">
+        <header class="panel header-panel">
+          <h1>Team Movistar Group Ride</h1>
+          <p class="welcome-subtitle">Choose your Rider!</p>
+          <p id="build-tag">Build: 2026-02-08-j</p>
+        </header>
+
+        <main class="panel selector-panel">
+          <h2>All Movistar Riders</h2>
+          <div id="character-grid" class="character-grid" role="list"></div>
+          <div class="selector-actions">
+            <button id="confirm-selection" class="primary-btn" disabled>LET'S FUCKING GOOO!</button>
+          </div>
+        </main>
+      </section>
+
+      <section id="game-screen" class="screen" aria-label="Game">
+        <div id="game-canvas-container"></div>
+        <div id="hud-overlay">
+          <button id="back-to-selection" class="mini-btn">Zur Uuswahl</button>
+          <p id="hud-text">Lade...</p>
+        </div>
+        <button id="sprint-btn" class="sprint-btn" aria-label="Sprint">Sprint 🔥</button>
+      </section>
+
+      <div id="rotate-overlay" aria-live="polite">
+        Bitte dreh dis Handy is Hochformat.
+      </div>
+    </div>
+
+    <script>
+      (function attachStartupDiagnostics() {
+        const renderMessage = (message) => {
+          const grid = document.getElementById("character-grid");
+          if (!grid) {
+            return;
+          }
+
+          grid.innerHTML = `<p class="loading-text">${message}</p>`;
+        };
+
+        window.__renderStartupMessage = renderMessage;
+        renderMessage("Initialisiere App ...");
+
+        window.addEventListener("error", (event) => {
+          if (event && event.message) {
+            renderMessage(`Startfehler: ${event.message}`);
+          }
+        });
+
+        window.addEventListener("unhandledrejection", (event) => {
+          const reason = event?.reason;
+          const message = reason?.message || String(reason || "Unbekannte Promise-Fehler");
+          renderMessage(`Startfehler: ${message}`);
+        });
+
+        window.setTimeout(() => {
+          const grid = document.getElementById("character-grid");
+          if (!grid) {
+            return;
+          }
+
+          const hasCards = grid.querySelector(".character-card");
+          const text = (grid.textContent || "").trim();
+          if (!hasCards && text.length === 0) {
+            renderMessage("App-Script isch nöd glade. Neu lade mit Cmd+Shift+R (oder Ctrl+Shift+R).");
+          }
+        }, 1800);
+      })();
+    </script>
+    <script type="module">
+      import("./src/main.js?v=20260208j").catch((error) => {
+        const message = error?.message || String(error || "Unbekannter Importfehler");
+        if (typeof window.__renderStartupMessage === "function") {
+          window.__renderStartupMessage(`Module-Fehler: ${message}`);
+        }
+        console.error(error);
+      });
+    </script>
+  </body>
+</html>
