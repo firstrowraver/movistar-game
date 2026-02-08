@@ -936,7 +936,29 @@ class RideScene extends PhaserSceneBase {
     const frontWheelX = 29;
     const crankX = 20;
     const crankY = 24;
+    const seatX = 17;
+    const seatY = 21;
+    const handlebarX = 30;
+    const handlebarY = 19;
     const pedalForward = frameIndex === 0;
+    const farSkin = shadeColor(visual.skinColor, -0.18);
+    const farSock = shadeColor(visual.sockColor, -0.15);
+    const farShoe = shadeColor(visual.shoeColor, -0.2);
+    const drawLeg = (leg, skinColor, sockColor, shoeColor) => {
+      g.fillStyle(skinColor, 1);
+      g.fillRect(leg.thighX, leg.thighY, 3, 6);
+      g.fillRect(leg.shinX, leg.shinY, 3, 5);
+      g.fillStyle(sockColor, 1);
+      g.fillRect(leg.sockX, leg.sockY, 3, 2);
+      g.fillStyle(shoeColor, 1);
+      g.fillRect(leg.shoeX, leg.shoeY, 4, 2);
+    };
+    const farLeg = pedalForward
+      ? { thighX: 15, thighY: 21, shinX: 14, shinY: 26, sockX: 14, sockY: 30, shoeX: 13, shoeY: 32 }
+      : { thighX: 18, thighY: 20, shinX: 18, shinY: 25, sockX: 18, sockY: 30, shoeX: 17, shoeY: 32 };
+    const nearLeg = pedalForward
+      ? { thighX: 24, thighY: 20, shinX: 25, shinY: 25, sockX: 25, sockY: 30, shoeX: 25, shoeY: 32 }
+      : { thighX: 20, thighY: 21, shinX: 19, shinY: 26, sockX: 19, sockY: 30, shoeX: 18, shoeY: 32 };
 
     g.fillStyle(0x0f0f0f, 1);
     g.fillCircle(rearWheelX, wheelY, 6);
@@ -955,51 +977,41 @@ class RideScene extends PhaserSceneBase {
     g.lineBetween(frontWheelX, wheelY - 5, frontWheelX, wheelY + 5);
     g.lineBetween(frontWheelX - 5, wheelY, frontWheelX + 5, wheelY);
 
+    drawLeg(farLeg, farSkin, farSock, farShoe);
+
     g.lineStyle(2, visual.bikeColor, 1);
     g.lineBetween(rearWheelX, wheelY, crankX, crankY);
-    g.lineBetween(crankX, crankY, frontWheelX, wheelY - 1);
-    g.lineBetween(rearWheelX + 1, wheelY - 3, frontWheelX - 3, wheelY - 4);
-    g.lineBetween(frontWheelX - 3, wheelY - 4, frontWheelX, wheelY - 1);
-    g.lineBetween(crankX, crankY, crankX + 2, wheelY - 7);
-    g.lineBetween(frontWheelX - 2, wheelY - 8, frontWheelX + 2, wheelY - 8);
+    g.lineBetween(crankX, crankY, frontWheelX - 1, wheelY - 1);
+    g.lineBetween(rearWheelX + 1, wheelY - 4, seatX, seatY);
+    g.lineBetween(seatX, seatY, handlebarX - 1, handlebarY);
+    g.lineBetween(handlebarX - 1, handlebarY, frontWheelX - 1, wheelY - 4);
+    g.lineBetween(crankX, crankY, seatX + 2, seatY - 1);
+    g.lineBetween(crankX, crankY, handlebarX - 3, handlebarY + 1);
+    g.lineBetween(handlebarX - 1, handlebarY - 2, handlebarX + 2, handlebarY - 2);
 
     g.lineStyle(1, visual.bikeAccent, 1);
-    g.lineBetween(rearWheelX + 1, wheelY - 2, crankX + 1, crankY - 1);
-    g.lineBetween(crankX, crankY - 1, frontWheelX - 1, wheelY - 2);
+    g.lineBetween(rearWheelX + 1, wheelY - 3, crankX + 1, crankY - 1);
+    g.lineBetween(crankX, crankY - 1, frontWheelX - 1, wheelY - 3);
+    g.lineBetween(seatX + 1, seatY - 1, handlebarX - 2, handlebarY - 1);
+    g.lineBetween(crankX + 1, crankY - 1, seatX + 1, seatY - 1);
 
-    g.fillStyle(visual.skinColor, 1);
-    if (pedalForward) {
-      g.fillRect(crankX - 4, crankY - 1, 3, 8);
-      g.fillRect(crankX + 2, crankY - 3, 3, 10);
-    } else {
-      g.fillRect(crankX - 4, crankY - 3, 3, 10);
-      g.fillRect(crankX + 2, crankY - 1, 3, 8);
-    }
+    g.fillStyle(0x1d1d1d, 1);
+    g.fillRect(seatX - 1, seatY - 1, 4, 1);
+    g.fillStyle(0x8f8f8f, 1);
+    g.fillRect(seatX, seatY, 1, 2);
 
-    g.fillStyle(visual.sockColor, 1);
-    if (pedalForward) {
-      g.fillRect(crankX - 4, crankY + 6, 3, 2);
-      g.fillRect(crankX + 2, crankY + 7, 3, 2);
-    } else {
-      g.fillRect(crankX - 4, crankY + 7, 3, 2);
-      g.fillRect(crankX + 2, crankY + 6, 3, 2);
-    }
-
-    g.fillStyle(visual.shoeColor, 1);
-    if (pedalForward) {
-      g.fillRect(crankX - 4, crankY + 8, 3, 2);
-      g.fillRect(crankX + 2, crankY + 9, 3, 2);
-    } else {
-      g.fillRect(crankX - 4, crankY + 9, 3, 2);
-      g.fillRect(crankX + 2, crankY + 8, 3, 2);
-    }
+    drawLeg(nearLeg, visual.skinColor, visual.sockColor, visual.shoeColor);
 
     g.fillStyle(visual.shortsColor, 1);
-    g.fillRect(15, 18, 10, 6);
+    g.fillRect(16, 19, 10, 4);
+    g.fillStyle(shadeColor(visual.shortsColor, -0.14), 1);
+    g.fillRect(16, 21, 10, 2);
+    g.fillStyle(shadeColor(visual.shortsColor, -0.22), 1);
+    g.fillRect(20, 20, 2, 3);
 
-    const jerseyX = 14;
-    const jerseyY = 12;
-    const jerseyW = 12;
+    const jerseyX = 17;
+    const jerseyY = 13;
+    const jerseyW = 10;
     const jerseyH = 7;
 
     g.fillStyle(visual.jerseyPrimary, 1);
@@ -1079,51 +1091,54 @@ class RideScene extends PhaserSceneBase {
 
     const armColor = visual.sleeveStyle === "long" ? visual.sleeveColor : visual.skinColor;
     g.fillStyle(armColor, 1);
-    g.fillRect(12, 14, 3, 3);
-    g.fillRect(26, 14, 3, 3);
+    g.fillRect(22, 16, 4, 2);
+    g.fillRect(25, 18, 4, 2);
+    g.fillRect(21, 17, 4, 2);
+    g.fillRect(24, 19, 4, 2);
 
     if (visual.sleeveStyle === "short") {
       g.fillStyle(visual.skinColor, 1);
-      g.fillRect(12, 16, 3, 1);
-      g.fillRect(26, 16, 3, 1);
+      g.fillRect(26, 19, 2, 1);
+      g.fillRect(27, 20, 2, 1);
     }
 
     g.fillStyle(visual.gloveColor, 1);
-    g.fillRect(11, 16, 2, 2);
-    g.fillRect(28, 16, 2, 2);
+    g.fillRect(27, 20, 2, 2);
+    g.fillRect(29, 20, 2, 2);
 
     g.fillStyle(visual.skinColor, 1);
-    g.fillCircle(20, 9, 4);
+    g.fillCircle(22, 10, 4);
+    g.fillRect(24, 11, 1, 1);
 
     g.fillStyle(visual.helmetColor, 1);
-    g.fillRect(16, 4, 8, 3);
-    g.fillRect(15, 6, 10, 1);
+    g.fillRect(18, 5, 9, 3);
+    g.fillRect(17, 7, 11, 1);
     g.fillStyle(visual.helmetAccent, 1);
-    g.fillRect(19, 4, 2, 3);
-    g.fillRect(15, 6, 1, 1);
-    g.fillRect(24, 6, 1, 1);
+    g.fillRect(21, 5, 2, 3);
+    g.fillRect(17, 7, 1, 1);
+    g.fillRect(27, 7, 1, 1);
 
     if (visual.glassesStyle === "sport") {
       g.fillStyle(visual.visorColor, 1);
-      g.fillRect(17, 8, 6, 2);
+      g.fillRect(20, 9, 6, 2);
       g.fillStyle(0x111111, 1);
-      g.fillRect(16, 8, 1, 2);
-      g.fillRect(23, 8, 1, 2);
+      g.fillRect(19, 9, 1, 2);
+      g.fillRect(26, 9, 1, 2);
     } else if (visual.glassesStyle === "visor") {
       g.fillStyle(visual.visorColor, 1);
-      g.fillRect(16, 7, 8, 3);
+      g.fillRect(19, 8, 8, 3);
       g.fillStyle(0x121212, 1);
-      g.fillRect(15, 7, 1, 2);
-      g.fillRect(24, 7, 1, 2);
+      g.fillRect(18, 8, 1, 2);
+      g.fillRect(27, 8, 1, 2);
     }
 
     if (visual.beardStyle === "stubble") {
       g.fillStyle(0x31231b, 1);
-      g.fillRect(18, 11, 4, 1);
+      g.fillRect(20, 13, 4, 1);
     } else if (visual.beardStyle === "full") {
       g.fillStyle(0x2a201a, 1);
-      g.fillRect(18, 10, 4, 3);
-      g.fillRect(19, 9, 2, 1);
+      g.fillRect(20, 12, 4, 3);
+      g.fillRect(21, 11, 2, 1);
     }
 
     g.generateTexture(textureKey, 40, 40);
@@ -1722,11 +1737,10 @@ class RideScene extends PhaserSceneBase {
 
     entity.sprite.setPosition(iso.x, iso.y - 5);
     entity.sprite.setDepth(iso.y + 12);
+    entity.sprite.setRotation(0);
 
     const speed = Math.hypot(entity.vx, entity.vy);
     if (speed > 0.05) {
-      entity.sprite.setRotation(Math.atan2(entity.vy, entity.vx) + Math.PI / 4);
-
       entity.frameTimer += this.game.loop.delta;
       const frameDuration = speed > 3.4 ? 95 : 135;
       if (entity.frameTimer >= frameDuration) {
