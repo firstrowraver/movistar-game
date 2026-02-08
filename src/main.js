@@ -12,6 +12,8 @@ const sprintButtonElement = document.getElementById("sprint-btn");
 const AVATAR_PREVIEW_BASE_WIDTH = 56;
 const AVATAR_PREVIEW_BASE_HEIGHT = 56;
 const AVATAR_PREVIEW_SCALE = 4;
+const RIDER_PEDAL_FRAME_COUNT = 4;
+const RIDER_TEXTURE_DIRECTIONS = ["side", "up", "down"];
 const DEFAULT_AVATAR_TRAITS = {
   browStyle: "straight",
   expression: "neutral",
@@ -833,6 +835,27 @@ class RideScene extends PhaserSceneBase {
         y2: this.loopCenter.y + 7,
         halfWidth: 1.4,
       },
+      {
+        x1: this.loopCenter.x - 18,
+        y1: this.loopCenter.y + 9.5,
+        x2: this.loopCenter.x + 15,
+        y2: this.loopCenter.y + 9.5,
+        halfWidth: 1.35,
+      },
+      {
+        x1: this.loopCenter.x - 15.5,
+        y1: this.loopCenter.y - 6,
+        x2: this.loopCenter.x - 15.5,
+        y2: this.loopCenter.y + 19,
+        halfWidth: 1.25,
+      },
+      {
+        x1: this.loopCenter.x + 12,
+        y1: this.loopCenter.y - 13,
+        x2: this.loopCenter.x + 21,
+        y2: this.loopCenter.y - 4,
+        halfWidth: 1.15,
+      },
     ];
 
     this.boundSprintHandler = null;
@@ -845,6 +868,8 @@ class RideScene extends PhaserSceneBase {
       this.createControls();
       this.createSharedTextures();
       this.drawGround();
+      this.drawTerrainBands();
+      this.drawStreetInfrastructure();
       this.createTerrainLabels();
       this.createObstacleLayout();
 
@@ -918,19 +943,33 @@ class RideScene extends PhaserSceneBase {
     for (const character of this.runtime.allCharacters) {
       const textureBaseKey = `rider-${character.id}`;
 
-      for (let frameIndex = 0; frameIndex < 2; frameIndex += 1) {
-        const textureKey = `${textureBaseKey}-${frameIndex}`;
-        if (this.textures.exists(textureKey)) {
-          continue;
-        }
+      for (const direction of RIDER_TEXTURE_DIRECTIONS) {
+        for (let frameIndex = 0; frameIndex < RIDER_PEDAL_FRAME_COUNT; frameIndex += 1) {
+          const textureKey = `${textureBaseKey}-${direction}-${frameIndex}`;
+          if (this.textures.exists(textureKey)) {
+            continue;
+          }
 
-        this.drawRiderTexture(textureKey, character.visual, frameIndex);
+          this.drawRiderTexture(textureKey, character.visual, frameIndex, direction);
+        }
       }
     }
   }
 
-  drawRiderTexture(textureKey, visual, frameIndex) {
+  drawRiderTexture(textureKey, visual, frameIndex, direction = "side") {
     const g = this.make.graphics({ add: false });
+
+    if (direction === "up" || direction === "down") {
+      this.drawVerticalRiderTexture(g, visual, frameIndex, direction);
+    } else {
+      this.drawSideRiderTexture(g, visual, frameIndex);
+    }
+
+    g.generateTexture(textureKey, 40, 40);
+    g.destroy();
+  }
+
+  drawSideRiderTexture(g, visual, frameIndex) {
     const wheelY = 30;
     const rearWheelX = 11;
     const frontWheelX = 29;
@@ -940,25 +979,25 @@ class RideScene extends PhaserSceneBase {
     const seatY = 21;
     const handlebarX = 30;
     const handlebarY = 19;
-    const pedalForward = frameIndex === 0;
     const farSkin = shadeColor(visual.skinColor, -0.18);
     const farSock = shadeColor(visual.sockColor, -0.15);
     const farShoe = shadeColor(visual.shoeColor, -0.2);
+    const pedalPose = this.getSidePedalPose(frameIndex);
+    const crankAngles = [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
+    const crankAngle = crankAngles[frameIndex % crankAngles.length];
+    const pedalOffsetX = Math.round(Math.cos(crankAngle) * 3);
+    const pedalOffsetY = Math.round(Math.sin(crankAngle) * 2);
     const drawLeg = (leg, skinColor, sockColor, shoeColor) => {
       g.fillStyle(skinColor, 1);
-      g.fillRect(leg.thighX, leg.thighY, 3, 6);
-      g.fillRect(leg.shinX, leg.shinY, 3, 5);
+      g.fillRect(leg.thighX, leg.thighY, 3, 5);
+      g.fillRect(leg.shinX, leg.shinY, 3, 4);
       g.fillStyle(sockColor, 1);
       g.fillRect(leg.sockX, leg.sockY, 3, 2);
       g.fillStyle(shoeColor, 1);
       g.fillRect(leg.shoeX, leg.shoeY, 4, 2);
     };
-    const farLeg = pedalForward
-      ? { thighX: 15, thighY: 21, shinX: 14, shinY: 26, sockX: 14, sockY: 30, shoeX: 13, shoeY: 32 }
-      : { thighX: 18, thighY: 20, shinX: 18, shinY: 25, sockX: 18, sockY: 30, shoeX: 17, shoeY: 32 };
-    const nearLeg = pedalForward
-      ? { thighX: 24, thighY: 20, shinX: 25, shinY: 25, sockX: 25, sockY: 30, shoeX: 25, shoeY: 32 }
-      : { thighX: 20, thighY: 21, shinX: 19, shinY: 26, sockX: 19, sockY: 30, shoeX: 18, shoeY: 32 };
+    const farLeg = pedalPose.far;
+    const nearLeg = pedalPose.near;
 
     g.fillStyle(0x0f0f0f, 1);
     g.fillCircle(rearWheelX, wheelY, 6);
@@ -994,6 +1033,13 @@ class RideScene extends PhaserSceneBase {
     g.lineBetween(crankX, crankY - 1, frontWheelX - 1, wheelY - 3);
     g.lineBetween(seatX + 1, seatY - 1, handlebarX - 2, handlebarY - 1);
     g.lineBetween(crankX + 1, crankY - 1, seatX + 1, seatY - 1);
+
+    g.lineStyle(1, 0xa2a2a2, 0.95);
+    g.lineBetween(crankX, crankY, crankX + pedalOffsetX, crankY + pedalOffsetY);
+    g.lineBetween(crankX, crankY, crankX - pedalOffsetX, crankY - pedalOffsetY);
+    g.fillStyle(0xb8b8b8, 1);
+    g.fillRect(crankX + pedalOffsetX - 1, crankY + pedalOffsetY, 2, 1);
+    g.fillRect(crankX - pedalOffsetX - 1, crankY - pedalOffsetY, 2, 1);
 
     g.fillStyle(0x1d1d1d, 1);
     g.fillRect(seatX - 1, seatY - 1, 4, 1);
@@ -1140,9 +1186,216 @@ class RideScene extends PhaserSceneBase {
       g.fillRect(20, 12, 4, 3);
       g.fillRect(21, 11, 2, 1);
     }
+  }
 
-    g.generateTexture(textureKey, 40, 40);
-    g.destroy();
+  getSidePedalPose(frameIndex) {
+    const poses = [
+      {
+        far: { thighX: 16, thighY: 20, shinX: 15, shinY: 24, sockX: 15, sockY: 28, shoeX: 14, shoeY: 30 },
+        near: { thighX: 23, thighY: 21, shinX: 24, shinY: 26, sockX: 24, sockY: 30, shoeX: 25, shoeY: 32 },
+      },
+      {
+        far: { thighX: 17, thighY: 21, shinX: 18, shinY: 25, sockX: 18, sockY: 29, shoeX: 19, shoeY: 31 },
+        near: { thighX: 21, thighY: 20, shinX: 20, shinY: 24, sockX: 20, sockY: 28, shoeX: 19, shoeY: 30 },
+      },
+      {
+        far: { thighX: 18, thighY: 22, shinX: 19, shinY: 27, sockX: 19, sockY: 31, shoeX: 20, shoeY: 33 },
+        near: { thighX: 22, thighY: 19, shinX: 23, shinY: 23, sockX: 23, sockY: 27, shoeX: 24, shoeY: 29 },
+      },
+      {
+        far: { thighX: 15, thighY: 21, shinX: 14, shinY: 25, sockX: 14, sockY: 29, shoeX: 13, shoeY: 31 },
+        near: { thighX: 24, thighY: 20, shinX: 25, shinY: 24, sockX: 25, sockY: 28, shoeX: 26, shoeY: 30 },
+      },
+    ];
+
+    return poses[frameIndex % poses.length];
+  }
+
+  drawVerticalRiderTexture(g, visual, frameIndex, direction) {
+    const centerX = 20;
+    const topWheelY = 13;
+    const bottomWheelY = 31;
+    const isFrontView = direction === "down";
+    const frontWheelY = isFrontView ? bottomWheelY : topWheelY;
+    const rearWheelY = isFrontView ? topWheelY : bottomWheelY;
+    const torsoY = 13;
+    const shortsY = 21;
+    const handlebarY = isFrontView ? 25 : 15;
+    const farSkin = shadeColor(visual.skinColor, -0.18);
+    const farSock = shadeColor(visual.sockColor, -0.15);
+    const farShoe = shadeColor(visual.shoeColor, -0.2);
+    const pedalPose = this.getVerticalPedalOffsets(frameIndex);
+    const drawLeg = (leg, skinColor, sockColor, shoeColor) => {
+      g.fillStyle(skinColor, 1);
+      g.fillRect(leg.thighX, leg.thighY, 2, 4);
+      g.fillRect(leg.shinX, leg.shinY, 2, 3);
+      g.fillStyle(sockColor, 1);
+      g.fillRect(leg.sockX, leg.sockY, 2, 2);
+      g.fillStyle(shoeColor, 1);
+      g.fillRect(leg.shoeX, leg.shoeY, 3, 2);
+    };
+
+    g.fillStyle(0x0f0f0f, 1);
+    g.fillCircle(centerX, topWheelY, 5);
+    g.fillCircle(centerX, bottomWheelY, 5);
+
+    g.fillStyle(visual.bikeAccent, 1);
+    g.fillCircle(centerX, topWheelY, 4);
+    g.fillCircle(centerX, bottomWheelY, 4);
+    g.fillStyle(0x232323, 1);
+    g.fillCircle(centerX, topWheelY, 2);
+    g.fillCircle(centerX, bottomWheelY, 2);
+
+    g.lineStyle(1, 0x8b8b8b, 0.55);
+    g.lineBetween(centerX - 4, topWheelY, centerX + 4, topWheelY);
+    g.lineBetween(centerX, topWheelY - 4, centerX, topWheelY + 4);
+    g.lineBetween(centerX - 4, bottomWheelY, centerX + 4, bottomWheelY);
+    g.lineBetween(centerX, bottomWheelY - 4, centerX, bottomWheelY + 4);
+
+    drawLeg(pedalPose.far, farSkin, farSock, farShoe);
+
+    g.lineStyle(2, visual.bikeColor, 1);
+    g.lineBetween(centerX, rearWheelY, centerX, 22);
+    g.lineBetween(centerX, 22, centerX, frontWheelY);
+    g.lineBetween(centerX - 1, 18, centerX + 1, 22);
+    g.lineBetween(centerX - 1, 22, centerX + 1, 26);
+    g.lineBetween(centerX - 4, handlebarY, centerX + 4, handlebarY);
+    g.lineStyle(1, visual.bikeAccent, 1);
+    g.lineBetween(centerX, 18, centerX, 26);
+    g.lineBetween(centerX - 3, 22, centerX + 3, 22);
+
+    drawLeg(pedalPose.near, visual.skinColor, visual.sockColor, visual.shoeColor);
+
+    g.fillStyle(visual.shortsColor, 1);
+    g.fillRect(16, shortsY, 8, 4);
+    g.fillStyle(shadeColor(visual.shortsColor, -0.14), 1);
+    g.fillRect(16, shortsY + 2, 8, 1);
+    g.fillRect(19, shortsY + 1, 2, 3);
+
+    g.fillStyle(visual.jerseyPrimary, 1);
+    g.fillRect(16, torsoY, 8, 9);
+    switch (visual.jerseyPattern) {
+      case "soudal":
+        g.fillStyle(visual.jerseyTertiary, 1);
+        g.fillRect(16, torsoY, 8, 2);
+        g.fillStyle(visual.jerseySecondary, 1);
+        g.fillRect(16, torsoY + 2, 8, 4);
+        g.fillStyle(visual.jerseyAccent, 1);
+        g.fillRect(16, torsoY + 6, 8, 3);
+        break;
+      case "vest":
+        g.fillStyle(visual.jerseySecondary, 1);
+        g.fillRect(17, torsoY + 2, 6, 7);
+        g.fillStyle(visual.jerseyAccent, 1);
+        g.fillRect(19, torsoY + 2, 2, 7);
+        break;
+      case "movistar":
+        g.fillStyle(visual.jerseyAccent, 1);
+        g.fillRect(17, torsoY + 2, 2, 2);
+        g.fillRect(21, torsoY + 4, 2, 2);
+        g.fillStyle(visual.jerseyTertiary, 1);
+        g.fillRect(16, torsoY + 7, 8, 2);
+        break;
+      default:
+        g.fillStyle(visual.jerseySecondary, 1);
+        g.fillRect(16, torsoY + 4, 8, 2);
+        g.fillStyle(visual.jerseyAccent, 1);
+        g.fillRect(16, torsoY + 7, 8, 1);
+        break;
+    }
+
+    const armColor = visual.sleeveStyle === "long" ? visual.sleeveColor : visual.skinColor;
+    g.fillStyle(armColor, 1);
+    g.fillRect(14, torsoY + 2, 2, 5);
+    g.fillRect(24, torsoY + 2, 2, 5);
+    if (visual.sleeveStyle === "short") {
+      g.fillStyle(visual.skinColor, 1);
+      g.fillRect(14, torsoY + 5, 2, 2);
+      g.fillRect(24, torsoY + 5, 2, 2);
+    }
+
+    g.fillStyle(visual.gloveColor, 1);
+    g.fillRect(14, handlebarY - 1, 2, 2);
+    g.fillRect(24, handlebarY - 1, 2, 2);
+
+    if (isFrontView) {
+      g.fillStyle(visual.skinColor, 1);
+      g.fillCircle(centerX, 10, 4);
+
+      if (visual.glassesStyle === "sport") {
+        g.fillStyle(visual.visorColor, 1);
+        g.fillRect(17, 9, 6, 2);
+      } else if (visual.glassesStyle === "visor") {
+        g.fillStyle(visual.visorColor, 1);
+        g.fillRect(16, 8, 8, 3);
+      }
+
+      if (visual.beardStyle === "stubble") {
+        g.fillStyle(0x31231b, 1);
+        g.fillRect(18, 12, 4, 1);
+      } else if (visual.beardStyle === "full") {
+        g.fillStyle(0x2a201a, 1);
+        g.fillRect(18, 11, 4, 3);
+      }
+    } else {
+      g.fillStyle(visual.skinColor, 1);
+      g.fillRect(19, 11, 2, 2);
+      g.fillStyle(shadeColor(visual.jerseyPrimary, -0.22), 1);
+      g.fillRect(18, torsoY + 1, 4, 2);
+    }
+
+    g.fillStyle(visual.helmetColor, 1);
+    g.fillRect(16, 6, 8, 3);
+    g.fillRect(17, 9, 6, 1);
+    g.fillStyle(visual.helmetAccent, 1);
+    g.fillRect(19, 6, 2, 4);
+  }
+
+  getVerticalPedalOffsets(frameIndex) {
+    const poses = [
+      {
+        far: { thighX: 17, thighY: 24, shinX: 17, shinY: 27, sockX: 17, sockY: 30, shoeX: 16, shoeY: 32 },
+        near: { thighX: 21, thighY: 25, shinX: 21, shinY: 28, sockX: 21, sockY: 31, shoeX: 21, shoeY: 33 },
+      },
+      {
+        far: { thighX: 16, thighY: 24, shinX: 16, shinY: 27, sockX: 16, sockY: 30, shoeX: 15, shoeY: 32 },
+        near: { thighX: 21, thighY: 24, shinX: 22, shinY: 27, sockX: 22, sockY: 30, shoeX: 22, shoeY: 32 },
+      },
+      {
+        far: { thighX: 17, thighY: 25, shinX: 17, shinY: 28, sockX: 17, sockY: 31, shoeX: 16, shoeY: 33 },
+        near: { thighX: 21, thighY: 24, shinX: 21, shinY: 27, sockX: 21, sockY: 30, shoeX: 21, shoeY: 32 },
+      },
+      {
+        far: { thighX: 17, thighY: 24, shinX: 16, shinY: 27, sockX: 16, sockY: 30, shoeX: 15, shoeY: 32 },
+        near: { thighX: 22, thighY: 24, shinX: 22, shinY: 27, sockX: 22, sockY: 30, shoeX: 22, shoeY: 32 },
+      },
+    ];
+
+    return poses[frameIndex % poses.length];
+  }
+
+  getFacingDirectionFromVelocity(vx, vy) {
+    const screenVx = (vx - vy) * (this.tileWidth / 2);
+    const screenVy = (vx + vy) * (this.tileHeight / 2);
+
+    if (Math.abs(screenVx) > Math.abs(screenVy)) {
+      return screenVx >= 0 ? "right" : "left";
+    }
+
+    return screenVy >= 0 ? "down" : "up";
+  }
+
+  getTextureViewForFacing(facingDirection) {
+    if (facingDirection === "up" || facingDirection === "down") {
+      return facingDirection;
+    }
+
+    return "side";
+  }
+
+  getTextureKeyForEntity(entity) {
+    const view = this.getTextureViewForFacing(entity.facingDirection);
+    return `${entity.textureBaseKey}-${view}-${entity.frameIndex}`;
   }
 
   drawGround() {
@@ -1155,33 +1408,222 @@ class RideScene extends PhaserSceneBase {
         const inSocialHub = this.isInSocialHub(x + 0.5, y + 0.5);
         const terrainType = this.getTerrainTypeAt(x + 0.5, y + 0.5);
 
-        let fill = isRoad ? 0x69635d : 0x6f8165;
-        let stroke = isRoad ? 0x554f4a : 0x5a6d52;
+        let fill = isRoad ? 0x6f6a63 : 0x6f8165;
+        let stroke = isRoad ? 0x5b554f : 0x5a6d52;
 
         if (terrainType === "ascending") {
-          fill = isRoad ? 0x76624f : 0x857b66;
-          stroke = isRoad ? 0x624f3e : 0x706653;
+          fill = isRoad ? 0x8c6646 : 0x8b7e66;
+          stroke = isRoad ? 0x6f4f36 : 0x746651;
         } else if (terrainType === "descending") {
-          fill = isRoad ? 0x5b6c79 : 0x657f83;
-          stroke = isRoad ? 0x4d5c67 : 0x576f73;
+          fill = isRoad ? 0x4d708f : 0x64828b;
+          stroke = isRoad ? 0x3b5670 : 0x4f6d78;
         }
 
         if (isRoad && inSocialHub) {
-          fill = 0x7a766e;
-          stroke = 0x635f57;
+          fill = 0x868178;
+          stroke = 0x6a655d;
         }
 
         this.drawIsoDiamond(mapGraphics, iso.x, iso.y, this.tileWidth, this.tileHeight, fill, stroke);
+        if (isRoad) {
+          this.drawRoadTileMarkings(mapGraphics, iso.x, iso.y, terrainType, inSocialHub);
+        }
       }
     }
 
     mapGraphics.setDepth(-1000);
   }
 
+  drawRoadTileMarkings(graphics, isoX, isoY, terrainType, inSocialHub) {
+    const middleY = isoY + this.tileHeight / 2;
+
+    if (inSocialHub) {
+      graphics.lineStyle(1, 0xf4efdf, 0.55);
+      graphics.lineBetween(isoX - 10, middleY, isoX + 10, middleY);
+      graphics.fillStyle(0xf4efdf, 0.45);
+      graphics.fillRect(isoX - 1, middleY - 1, 2, 2);
+      return;
+    }
+
+    if (terrainType === "ascending") {
+      graphics.lineStyle(1, 0xffdc91, 0.6);
+      graphics.lineBetween(isoX - 14, middleY + 4, isoX - 2, middleY - 3);
+      graphics.lineBetween(isoX - 5, middleY + 7, isoX + 9, middleY - 1);
+      graphics.fillStyle(0xffc76d, 0.75);
+      graphics.fillTriangle(isoX, middleY - 7, isoX - 3, middleY - 2, isoX + 3, middleY - 2);
+      return;
+    }
+
+    if (terrainType === "descending") {
+      graphics.lineStyle(1, 0x9fe3ff, 0.62);
+      graphics.lineBetween(isoX - 10, middleY - 6, isoX + 4, middleY + 2);
+      graphics.lineBetween(isoX - 2, middleY - 8, isoX + 12, middleY);
+      graphics.fillStyle(0x8dcfff, 0.72);
+      graphics.fillTriangle(isoX, middleY + 7, isoX - 3, middleY + 2, isoX + 3, middleY + 2);
+      return;
+    }
+
+    graphics.lineStyle(1, 0xefecdf, 0.5);
+    graphics.lineBetween(isoX - 9, middleY, isoX + 9, middleY);
+    graphics.fillStyle(0xefecdf, 0.42);
+    graphics.fillRect(isoX - 1, middleY - 1, 2, 2);
+  }
+
+  drawTerrainBands() {
+    const g = this.add.graphics();
+
+    this.drawLoopSectionBand(g, 0, this.passSectionAngles.start, 0xe9e3cf, 0.1);
+    this.drawLoopSectionBand(g, this.passSectionAngles.start, this.passSectionAngles.end, 0xff9b4e, 0.22);
+    this.drawLoopSectionBand(g, this.descentSectionAngles.start, this.descentSectionAngles.end, 0x5ebeff, 0.2);
+
+    g.setDepth(-980);
+    this.terrainBandGraphics = g;
+  }
+
+  drawLoopSectionBand(graphics, startAngle, endAngle, color, alpha) {
+    if (endAngle <= startAngle) {
+      return;
+    }
+
+    const outerX = this.loopOuterRadius.x - 0.2;
+    const outerY = this.loopOuterRadius.y - 0.2;
+    const innerX = this.loopInnerRadius.x + 0.2;
+    const innerY = this.loopInnerRadius.y + 0.2;
+    const steps = Math.max(8, Math.ceil((endAngle - startAngle) / 0.09));
+
+    graphics.fillStyle(color, alpha);
+    graphics.beginPath();
+
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const angle = Phaser.Math.Linear(startAngle, endAngle, t);
+      const x = this.loopCenter.x + Math.cos(angle) * outerX;
+      const y = this.loopCenter.y + Math.sin(angle) * outerY;
+      const iso = this.toIso(x, y);
+      if (i === 0) {
+        graphics.moveTo(iso.x, iso.y + this.tileHeight / 2);
+      } else {
+        graphics.lineTo(iso.x, iso.y + this.tileHeight / 2);
+      }
+    }
+
+    for (let i = steps; i >= 0; i -= 1) {
+      const t = i / steps;
+      const angle = Phaser.Math.Linear(startAngle, endAngle, t);
+      const x = this.loopCenter.x + Math.cos(angle) * innerX;
+      const y = this.loopCenter.y + Math.sin(angle) * innerY;
+      const iso = this.toIso(x, y);
+      graphics.lineTo(iso.x, iso.y + this.tileHeight / 2);
+    }
+
+    graphics.closePath();
+    graphics.fillPath();
+  }
+
+  drawStreetInfrastructure() {
+    const g = this.add.graphics();
+
+    g.lineStyle(2, 0xf4f4ed, 0.62);
+    for (const connector of this.connectorRoads) {
+      this.drawDashedRoadLine(g, connector.x1, connector.y1, connector.x2, connector.y2, 1.8, 1.35);
+    }
+
+    const midRadiusX = (this.loopOuterRadius.x + this.loopInnerRadius.x) / 2;
+    const midRadiusY = (this.loopOuterRadius.y + this.loopInnerRadius.y) / 2;
+    for (let angle = 0; angle < Math.PI * 2; angle += 0.14) {
+      const dashIndex = Math.floor(angle / 0.14);
+      if (dashIndex % 2 !== 0) {
+        continue;
+      }
+
+      const nextAngle = angle + 0.08;
+      const x1 = this.loopCenter.x + Math.cos(angle) * midRadiusX;
+      const y1 = this.loopCenter.y + Math.sin(angle) * midRadiusY;
+      const x2 = this.loopCenter.x + Math.cos(nextAngle) * midRadiusX;
+      const y2 = this.loopCenter.y + Math.sin(nextAngle) * midRadiusY;
+
+      const isoA = this.toIso(x1, y1);
+      const isoB = this.toIso(x2, y2);
+      g.lineBetween(isoA.x, isoA.y + this.tileHeight / 2, isoB.x, isoB.y + this.tileHeight / 2);
+    }
+
+    this.drawCrosswalk(g, this.loopCenter.x - 15.5, this.loopCenter.y + 9.5, 2.2, 3.8, "vertical");
+    this.drawCrosswalk(g, this.loopCenter.x - 12.8, this.loopCenter.y + 9.5, 3.8, 2.2, "horizontal");
+    this.drawCrosswalk(g, this.loopCenter.x + 11.7, this.loopCenter.y - 12.8, 2.8, 2.1, "diag");
+
+    g.setDepth(-945);
+    this.streetInfrastructure = g;
+  }
+
+  drawDashedRoadLine(graphics, x1, y1, x2, y2, dashLength, gapLength) {
+    const length = Phaser.Math.Distance.Between(x1, y1, x2, y2);
+    if (length <= 0.0001) {
+      return;
+    }
+
+    const step = dashLength + gapLength;
+    const dx = (x2 - x1) / length;
+    const dy = (y2 - y1) / length;
+
+    for (let covered = 0; covered < length; covered += step) {
+      const start = covered;
+      const end = Math.min(length, covered + dashLength);
+
+      const sx = x1 + dx * start;
+      const sy = y1 + dy * start;
+      const ex = x1 + dx * end;
+      const ey = y1 + dy * end;
+
+      const isoS = this.toIso(sx, sy);
+      const isoE = this.toIso(ex, ey);
+      graphics.lineBetween(isoS.x, isoS.y + this.tileHeight / 2, isoE.x, isoE.y + this.tileHeight / 2);
+    }
+  }
+
+  drawCrosswalk(graphics, centerX, centerY, width, depth, orientation = "horizontal") {
+    const stripeCount = 6;
+    for (let i = 0; i < stripeCount; i += 1) {
+      const t = i / (stripeCount - 1);
+      const stripeWidth = width / 9;
+      const stripeDepth = depth / 1.1;
+      let stripeCenterX = centerX;
+      let stripeCenterY = centerY;
+
+      if (orientation === "vertical") {
+        stripeCenterY = centerY - depth / 2 + t * depth;
+      } else if (orientation === "diag") {
+        stripeCenterX = centerX - width / 2 + t * width;
+        stripeCenterY = centerY - depth / 2 + t * (depth * 0.8);
+      } else {
+        stripeCenterX = centerX - width / 2 + t * width;
+      }
+
+      const x1 = stripeCenterX - stripeWidth / 2;
+      const x2 = stripeCenterX + stripeWidth / 2;
+      const y1 = stripeCenterY - stripeDepth / 2;
+      const y2 = stripeCenterY + stripeDepth / 2;
+
+      const p1 = this.toIso(x1, y1);
+      const p2 = this.toIso(x2, y1);
+      const p3 = this.toIso(x2, y2);
+      const p4 = this.toIso(x1, y2);
+
+      graphics.fillStyle(0xf6f6ef, 0.7);
+      graphics.beginPath();
+      graphics.moveTo(p1.x, p1.y + this.tileHeight / 2);
+      graphics.lineTo(p2.x, p2.y + this.tileHeight / 2);
+      graphics.lineTo(p3.x, p3.y + this.tileHeight / 2);
+      graphics.lineTo(p4.x, p4.y + this.tileHeight / 2);
+      graphics.closePath();
+      graphics.fillPath();
+    }
+  }
+
   createTerrainLabels() {
     const socialPoint = this.toIso(this.socialHub.x, this.socialHub.y);
     const climbPoint = this.toIso(...this.getLoopPointAtAngle((this.passSectionAngles.start + this.passSectionAngles.end) / 2));
     const descentPoint = this.toIso(...this.getLoopPointAtAngle(Math.PI * 1.75));
+    const flatPoint = this.toIso(...this.getLoopPointAtAngle(Math.PI * 0.42));
 
     const socialText = this.add
       .text(socialPoint.x, socialPoint.y - 28, "Social/Meeting Section", {
@@ -1195,28 +1637,39 @@ class RideScene extends PhaserSceneBase {
       .setDepth(socialPoint.y + 130);
 
     const uphillText = this.add
-      .text(climbPoint.x, climbPoint.y - 30, "Climb/Pass Section", {
+      .text(climbPoint.x, climbPoint.y - 30, "CLIMB / PASS ▲", {
         fontFamily: "Verdana",
-        fontSize: "12px",
-        color: "#f4f0db",
-        stroke: "#4a3b2e",
+        fontSize: "13px",
+        color: "#ffe9c8",
+        stroke: "#5c3d23",
         strokeThickness: 4,
       })
       .setOrigin(0.5)
       .setDepth(climbPoint.y + 130);
 
     const downhillText = this.add
-      .text(descentPoint.x, descentPoint.y - 30, "Abfahrt", {
+      .text(descentPoint.x, descentPoint.y - 30, "DESCENT ▼", {
         fontFamily: "Verdana",
         fontSize: "13px",
-        color: "#f4f0db",
-        stroke: "#2f4952",
+        color: "#d7efff",
+        stroke: "#27485f",
         strokeThickness: 4,
       })
       .setOrigin(0.5)
       .setDepth(descentPoint.y + 130);
 
-    this.zoneLabels = [socialText, uphillText, downhillText];
+    const flatText = this.add
+      .text(flatPoint.x, flatPoint.y - 26, "FLAT LOOP", {
+        fontFamily: "Verdana",
+        fontSize: "12px",
+        color: "#f6f3e6",
+        stroke: "#4e4b42",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(flatPoint.y + 130);
+
+    this.zoneLabels = [socialText, uphillText, downhillText, flatText];
   }
 
   createObstacleLayout() {
@@ -1224,11 +1677,57 @@ class RideScene extends PhaserSceneBase {
     const centerY = this.loopCenter.y;
 
     this.obstacles = [
-      { id: "hut-1", type: "building", x: centerX - 22, y: centerY - 23, w: 8, h: 7, label: "Passhütte" },
+      { id: "lochergut", type: "lochergut", x: centerX - 19.5, y: centerY + 12.2, w: 12, h: 8, height: 138, label: "Lochergut Zürich" },
+      { id: "furka-hotel", type: "furka-hotel", x: centerX - 23.5, y: centerY - 22.5, w: 9, h: 7, height: 104, label: "Furka Pass Hotel" },
       { id: "hut-2", type: "building", x: centerX + 13, y: centerY + 12, w: 8, h: 7, label: "Tal Cafi" },
       { id: "hut-3", type: "building", x: centerX - 5, y: centerY + 20, w: 8, h: 7, label: "Aussicht" },
+      { id: "mountain-cafe", type: "building", x: centerX + 16.6, y: centerY - 13.8, w: 6.8, h: 5.8, label: "Pass Cafi" },
       { id: "van-1", type: "car", x: centerX + 4.8, y: centerY - 19, w: 2.6, h: 1.7 },
       { id: "van-2", type: "car", x: centerX - 18.5, y: centerY + 6.4, w: 2.6, h: 1.7 },
+      {
+        id: "sign-lochergut",
+        type: "street-sign",
+        x: centerX - 14.6,
+        y: centerY + 10.3,
+        w: 0.9,
+        h: 0.9,
+        label: "Lochergut",
+        signColor: 0x2e6bc9,
+        collidable: false,
+      },
+      {
+        id: "sign-furka",
+        type: "street-sign",
+        x: centerX - 21.3,
+        y: centerY - 16.9,
+        w: 0.9,
+        h: 0.9,
+        label: "Furka Pass",
+        signColor: 0x2f7d4c,
+        collidable: false,
+      },
+      {
+        id: "sign-belvedere",
+        type: "street-sign",
+        x: centerX - 16.7,
+        y: centerY - 11.8,
+        w: 0.9,
+        h: 0.9,
+        label: "Belvedere",
+        signColor: 0x8a3a2b,
+        collidable: false,
+      },
+      {
+        id: "sign-social",
+        type: "street-sign",
+        x: centerX - 6.2,
+        y: centerY + 8.8,
+        w: 0.9,
+        h: 0.9,
+        label: "Social Plaza",
+        signColor: 0x334a90,
+        collidable: false,
+      },
     ];
 
     for (const obstacle of this.obstacles) {
@@ -1237,65 +1736,47 @@ class RideScene extends PhaserSceneBase {
   }
 
   drawObstacle(obstacle) {
-    const g = this.add.graphics();
-
-    const p1 = this.toIso(obstacle.x, obstacle.y);
-    const p2 = this.toIso(obstacle.x + obstacle.w, obstacle.y);
-    const p3 = this.toIso(obstacle.x + obstacle.w, obstacle.y + obstacle.h);
-    const p4 = this.toIso(obstacle.x, obstacle.y + obstacle.h);
-
-    const height = obstacle.type === "building" ? 84 : 22;
-
-    let topColor = 0xc6b68f;
-    let leftColor = 0x8d7b5f;
-    let rightColor = 0x75674f;
-
-    if (obstacle.type === "car") {
-      topColor = 0xd44f3e;
-      leftColor = 0xa03b30;
-      rightColor = 0x7f2f28;
+    if (obstacle.type === "street-sign") {
+      this.drawStreetSignObstacle(obstacle);
+      return;
     }
 
-    const t1 = { x: p1.x, y: p1.y - height };
-    const t2 = { x: p2.x, y: p2.y - height };
-    const t3 = { x: p3.x, y: p3.y - height };
-    const t4 = { x: p4.x, y: p4.y - height };
+    const g = this.add.graphics();
+    const height = obstacle.height || (obstacle.type === "car" ? 22 : 84);
+    const geo = this.getObstacleGeometry(obstacle, height);
 
-    g.fillStyle(leftColor, 1);
-    g.beginPath();
-    g.moveTo(p4.x, p4.y);
-    g.lineTo(p1.x, p1.y);
-    g.lineTo(t1.x, t1.y);
-    g.lineTo(t4.x, t4.y);
-    g.closePath();
-    g.fillPath();
+    if (obstacle.type === "lochergut") {
+      this.drawLochergutObstacle(g, obstacle, geo);
+    } else if (obstacle.type === "furka-hotel") {
+      this.drawFurkaHotelObstacle(g, obstacle, geo);
+    } else if (obstacle.type === "car") {
+      this.drawPrismShell(g, geo, {
+        topColor: 0xd44f3e,
+        leftColor: 0xa03b30,
+        rightColor: 0x7f2f28,
+      });
 
-    g.fillStyle(rightColor, 1);
-    g.beginPath();
-    g.moveTo(p3.x, p3.y);
-    g.lineTo(p4.x, p4.y);
-    g.lineTo(t4.x, t4.y);
-    g.lineTo(t3.x, t3.y);
-    g.closePath();
-    g.fillPath();
+      const center = this.toIso(obstacle.x + obstacle.w / 2, obstacle.y + obstacle.h / 2);
+      g.fillStyle(0x1b1b1b, 0.95);
+      g.fillRect(center.x - 8, center.y - 18, 16, 5);
+      g.fillStyle(0xe9f3fa, 0.8);
+      g.fillRect(center.x - 6, center.y - 17, 12, 2);
+      g.fillStyle(0x202020, 1);
+      g.fillCircle(center.x - 7, center.y - 2, 3);
+      g.fillCircle(center.x + 7, center.y - 2, 3);
+    } else {
+      this.drawPrismShell(g, geo, {
+        topColor: 0xc6b68f,
+        leftColor: 0x8d7b5f,
+        rightColor: 0x75674f,
+      });
+    }
 
-    g.fillStyle(topColor, 1);
-    g.beginPath();
-    g.moveTo(t1.x, t1.y);
-    g.lineTo(t2.x, t2.y);
-    g.lineTo(t3.x, t3.y);
-    g.lineTo(t4.x, t4.y);
-    g.closePath();
-    g.fillPath();
-
-    g.lineStyle(2, 0x312621, 0.55);
-    g.strokePath();
-
-    g.setDepth(Math.max(p3.y, p4.y) + 40);
+    g.setDepth(Math.max(geo.p3.y, geo.p4.y) + 40);
 
     obstacle.visual = g;
 
-    if (obstacle.type === "building" && obstacle.label) {
+    if (obstacle.label && obstacle.type !== "street-sign") {
       const center = this.toIso(obstacle.x + obstacle.w / 2, obstacle.y + obstacle.h / 2);
       obstacle.labelText = this.add
         .text(center.x, center.y - height - 12, obstacle.label, {
@@ -1306,7 +1787,220 @@ class RideScene extends PhaserSceneBase {
           strokeThickness: 4,
         })
         .setOrigin(0.5)
-        .setDepth(Math.max(p3.y, p4.y) + 120);
+        .setDepth(Math.max(geo.p3.y, geo.p4.y) + 120);
+    }
+  }
+
+  getObstacleGeometry(obstacle, height) {
+    const p1 = this.toIso(obstacle.x, obstacle.y);
+    const p2 = this.toIso(obstacle.x + obstacle.w, obstacle.y);
+    const p3 = this.toIso(obstacle.x + obstacle.w, obstacle.y + obstacle.h);
+    const p4 = this.toIso(obstacle.x, obstacle.y + obstacle.h);
+
+    return {
+      p1,
+      p2,
+      p3,
+      p4,
+      t1: { x: p1.x, y: p1.y - height },
+      t2: { x: p2.x, y: p2.y - height },
+      t3: { x: p3.x, y: p3.y - height },
+      t4: { x: p4.x, y: p4.y - height },
+      height,
+    };
+  }
+
+  drawPrismShell(graphics, geo, colors) {
+    graphics.fillStyle(colors.leftColor, 1);
+    graphics.beginPath();
+    graphics.moveTo(geo.p4.x, geo.p4.y);
+    graphics.lineTo(geo.p1.x, geo.p1.y);
+    graphics.lineTo(geo.t1.x, geo.t1.y);
+    graphics.lineTo(geo.t4.x, geo.t4.y);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.fillStyle(colors.rightColor, 1);
+    graphics.beginPath();
+    graphics.moveTo(geo.p3.x, geo.p3.y);
+    graphics.lineTo(geo.p4.x, geo.p4.y);
+    graphics.lineTo(geo.t4.x, geo.t4.y);
+    graphics.lineTo(geo.t3.x, geo.t3.y);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.fillStyle(colors.topColor, 1);
+    graphics.beginPath();
+    graphics.moveTo(geo.t1.x, geo.t1.y);
+    graphics.lineTo(geo.t2.x, geo.t2.y);
+    graphics.lineTo(geo.t3.x, geo.t3.y);
+    graphics.lineTo(geo.t4.x, geo.t4.y);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.lineStyle(2, 0x312621, 0.55);
+    graphics.strokePath();
+  }
+
+  drawFaceWindowGrid(graphics, topA, topB, bottomA, bottomB, cols, rows, color, alpha = 1, size = 2) {
+    graphics.fillStyle(color, alpha);
+    for (let row = 0; row < rows; row += 1) {
+      const v = (row + 0.22) / rows;
+      const left = this.lerpPoint(topA, bottomA, v);
+      const right = this.lerpPoint(topB, bottomB, v);
+      for (let col = 0; col < cols; col += 1) {
+        const u = (col + 0.18) / cols;
+        const p = this.lerpPoint(left, right, u);
+        graphics.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+      }
+    }
+  }
+
+  lerpPoint(a, b, t) {
+    return {
+      x: Phaser.Math.Linear(a.x, b.x, t),
+      y: Phaser.Math.Linear(a.y, b.y, t),
+    };
+  }
+
+  drawLochergutObstacle(graphics, obstacle, geo) {
+    this.drawPrismShell(graphics, geo, {
+      topColor: 0xe4e1d7,
+      leftColor: 0xbcae92,
+      rightColor: 0xd8d2c4,
+    });
+
+    graphics.lineStyle(1, 0xf2efe5, 0.75);
+    for (let i = 1; i <= 12; i += 1) {
+      const t = i / 13;
+      const leftEdge = this.lerpPoint(geo.t1, geo.p1, t);
+      const rightEdge = this.lerpPoint(geo.t2, geo.p2, t);
+      graphics.lineBetween(leftEdge.x, leftEdge.y, rightEdge.x, rightEdge.y);
+    }
+
+    this.drawFaceWindowGrid(graphics, geo.t1, geo.t4, geo.p1, geo.p4, 3, 12, 0x3e4652, 0.88, 2);
+    this.drawFaceWindowGrid(graphics, geo.t4, geo.t3, geo.p4, geo.p3, 7, 12, 0x404b58, 0.88, 2);
+
+    const podium = this.getObstacleGeometry(
+      {
+        x: obstacle.x - 0.4,
+        y: obstacle.y + obstacle.h - 1.6,
+        w: obstacle.w + 0.8,
+        h: 2.2,
+      },
+      24,
+    );
+    this.drawPrismShell(graphics, podium, {
+      topColor: 0xbbb4a6,
+      leftColor: 0x8f8678,
+      rightColor: 0x9c9283,
+    });
+
+    const roofBlock = this.getObstacleGeometry(
+      {
+        x: obstacle.x + obstacle.w * 0.36,
+        y: obstacle.y + obstacle.h * 0.3,
+        w: obstacle.w * 0.28,
+        h: obstacle.h * 0.34,
+      },
+      16,
+    );
+    this.drawPrismShell(graphics, roofBlock, {
+      topColor: 0xd2cec0,
+      leftColor: 0x9b9284,
+      rightColor: 0xb0a697,
+    });
+  }
+
+  drawFurkaHotelObstacle(graphics, obstacle, geo) {
+    this.drawPrismShell(graphics, geo, {
+      topColor: 0xe0ddd3,
+      leftColor: 0x8b7a64,
+      rightColor: 0x6f6252,
+    });
+
+    this.drawFaceWindowGrid(graphics, geo.t1, geo.t4, geo.p1, geo.p4, 3, 6, 0x31404b, 0.88, 2.4);
+    this.drawFaceWindowGrid(graphics, geo.t4, geo.t3, geo.p4, geo.p3, 3, 6, 0x283742, 0.88, 2.4);
+
+    const ridgeFront = this.lerpPoint(geo.t1, geo.t2, 0.5);
+    const ridgeBack = this.lerpPoint(geo.t4, geo.t3, 0.5);
+    const ridgePeakFront = { x: ridgeFront.x, y: ridgeFront.y - 22 };
+    const ridgePeakBack = { x: ridgeBack.x, y: ridgeBack.y - 22 };
+
+    graphics.fillStyle(0xe9e7e0, 1);
+    graphics.beginPath();
+    graphics.moveTo(geo.t1.x, geo.t1.y);
+    graphics.lineTo(geo.t4.x, geo.t4.y);
+    graphics.lineTo(ridgePeakBack.x, ridgePeakBack.y);
+    graphics.lineTo(ridgePeakFront.x, ridgePeakFront.y);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.fillStyle(0xd7d4cb, 1);
+    graphics.beginPath();
+    graphics.moveTo(geo.t2.x, geo.t2.y);
+    graphics.lineTo(geo.t3.x, geo.t3.y);
+    graphics.lineTo(ridgePeakBack.x, ridgePeakBack.y);
+    graphics.lineTo(ridgePeakFront.x, ridgePeakFront.y);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.lineStyle(1, 0x63574a, 0.7);
+    graphics.lineBetween(ridgePeakFront.x, ridgePeakFront.y, ridgePeakBack.x, ridgePeakBack.y);
+
+    const annexCenter = this.lerpPoint(geo.p3, geo.p4, 0.5);
+    graphics.fillStyle(0x76452d, 1);
+    graphics.fillEllipse(annexCenter.x, annexCenter.y - 10, 56, 18);
+    graphics.fillStyle(0xd7d4ca, 1);
+    graphics.fillEllipse(annexCenter.x, annexCenter.y - 10, 44, 11);
+    graphics.fillStyle(0x3a342d, 1);
+    graphics.fillRect(annexCenter.x - 12, annexCenter.y - 12, 24, 3);
+
+    const hotelText = this.add
+      .text(annexCenter.x, annexCenter.y - 58, "HOTEL", {
+        fontFamily: "Verdana",
+        fontSize: "14px",
+        color: "#d17f47",
+        stroke: "#3b2920",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(Math.max(geo.p3.y, geo.p4.y) + 70);
+
+    obstacle.extraLabel = hotelText;
+  }
+
+  drawStreetSignObstacle(obstacle) {
+    const g = this.add.graphics();
+    const center = this.toIso(obstacle.x + obstacle.w / 2, obstacle.y + obstacle.h / 2);
+    const signColor = obstacle.signColor || 0x2f5ba8;
+
+    g.fillStyle(0x777777, 1);
+    g.fillRect(center.x - 1, center.y - 18, 2, 18);
+    g.fillStyle(0xc8c8c8, 0.9);
+    g.fillRect(center.x - 2, center.y - 1, 4, 2);
+
+    g.fillStyle(signColor, 1);
+    g.fillRoundedRect(center.x - 18, center.y - 24, 36, 10, 2);
+    g.fillStyle(0xe9edf8, 1);
+    g.fillTriangle(center.x + 18, center.y - 19, center.x + 24, center.y - 17, center.x + 18, center.y - 15);
+    g.lineStyle(1, 0x1d2530, 0.8);
+    g.strokeRoundedRect(center.x - 18, center.y - 24, 36, 10, 2);
+
+    g.setDepth(center.y + 55);
+    obstacle.visual = g;
+
+    if (obstacle.label) {
+      obstacle.labelText = this.add
+        .text(center.x, center.y - 19, obstacle.label, {
+          fontFamily: "Verdana",
+          fontSize: "9px",
+          color: "#fdfdfd",
+          stroke: "#152132",
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5)
+        .setDepth(center.y + 58);
     }
   }
 
@@ -1332,9 +2026,12 @@ class RideScene extends PhaserSceneBase {
     occupiedPositions.push({ x: spawnPoint.x, y: spawnPoint.y });
 
     const textureBaseKey = `rider-${character.id}`;
+    const npcFacingOptions = ["right", "left", "up", "down"];
+    const facingDirection = isPlayer ? "down" : npcFacingOptions[Math.floor(Math.random() * npcFacingOptions.length)];
+    const initialTextureKey = `${textureBaseKey}-${this.getTextureViewForFacing(facingDirection)}-0`;
 
     const shadow = this.add.image(0, 0, "shadow-oval").setAlpha(isPlayer ? 0.45 : 0.32);
-    const sprite = this.add.image(0, 0, `${textureBaseKey}-0`).setOrigin(0.5, 0.8);
+    const sprite = this.add.image(0, 0, initialTextureKey).setOrigin(0.5, 0.8);
     const nameTag = this.add
       .text(0, 0, character.name, {
         fontFamily: "Verdana",
@@ -1378,7 +2075,9 @@ class RideScene extends PhaserSceneBase {
       dialogueBag: [],
       frameIndex: 0,
       frameTimer: 0,
+      facingDirection,
       textureBaseKey,
+      currentTextureKey: initialTextureKey,
     };
 
     if (isPlayer) {
@@ -1741,17 +2440,24 @@ class RideScene extends PhaserSceneBase {
 
     const speed = Math.hypot(entity.vx, entity.vy);
     if (speed > 0.05) {
+      entity.facingDirection = this.getFacingDirectionFromVelocity(entity.vx, entity.vy);
       entity.frameTimer += this.game.loop.delta;
-      const frameDuration = speed > 3.4 ? 95 : 135;
-      if (entity.frameTimer >= frameDuration) {
-        entity.frameTimer = 0;
-        entity.frameIndex = (entity.frameIndex + 1) % 2;
-        entity.sprite.setTexture(`${entity.textureBaseKey}-${entity.frameIndex}`);
+      const frameDuration = speed > 3.6 ? 74 : speed > 2.8 ? 90 : 112;
+      while (entity.frameTimer >= frameDuration) {
+        entity.frameTimer -= frameDuration;
+        entity.frameIndex = (entity.frameIndex + 1) % RIDER_PEDAL_FRAME_COUNT;
       }
-    } else if (entity.frameIndex !== 0) {
+    } else if (entity.frameIndex !== 0 || entity.frameTimer !== 0) {
       entity.frameIndex = 0;
       entity.frameTimer = 0;
-      entity.sprite.setTexture(`${entity.textureBaseKey}-0`);
+    }
+
+    entity.sprite.setFlipX(entity.facingDirection === "left");
+
+    const textureKey = this.getTextureKeyForEntity(entity);
+    if (entity.currentTextureKey !== textureKey) {
+      entity.currentTextureKey = textureKey;
+      entity.sprite.setTexture(textureKey);
     }
 
     entity.nameTag.setPosition(iso.x, iso.y - 32);
@@ -1930,6 +2636,10 @@ class RideScene extends PhaserSceneBase {
 
   collidesObstacle(worldX, worldY, radius) {
     for (const obstacle of this.obstacles) {
+      if (obstacle.collidable === false) {
+        continue;
+      }
+
       const nearestX = Phaser.Math.Clamp(worldX, obstacle.x, obstacle.x + obstacle.w);
       const nearestY = Phaser.Math.Clamp(worldY, obstacle.y, obstacle.y + obstacle.h);
       const distanceSquared = Phaser.Math.Distance.Squared(worldX, worldY, nearestX, nearestY);
