@@ -1458,18 +1458,25 @@ class RideScene extends PhaserSceneBase {
         const worldX = x + 0.5;
         const worldY = y + 0.5;
         const iso = this.toIso(x, y, false);
-        const onClimb = this.isOnClimbSurface(worldX, worldY);
-        const roadInfo = onClimb ? null : this.getRoadInfoAt(worldX, worldY);
+        const onClimbRoad = this.isOnClimbRoad(worldX, worldY);
+        const onClimbSurface = this.isOnClimbSurface(worldX, worldY);
+        const roadInfo = onClimbSurface ? null : this.getRoadInfoAt(worldX, worldY);
 
         let fill = 0x86a07b;
         let stroke = 0x6f8866;
 
-        if (roadInfo?.onRoad) {
+        if (onClimbRoad) {
+          // Climb road: same grey as flat roads
           fill = 0x6f6f6f;
           stroke = 0x575757;
-        } else if (onClimb) {
-          fill = 0x819b76;
-          stroke = 0x6b8563;
+        } else if (onClimbSurface) {
+          // Climb side areas: green grass
+          fill = 0x86a07b;
+          stroke = 0x6f8866;
+        } else if (roadInfo?.onRoad) {
+          // Flat roads: grey
+          fill = 0x6f6f6f;
+          stroke = 0x575757;
         }
 
         this.drawIsoDiamond(mapGraphics, iso.x, iso.y, this.tileWidth, this.tileHeight, fill, stroke);
@@ -1570,10 +1577,10 @@ class RideScene extends PhaserSceneBase {
     const bottomRoadRaised = this.getClimbEdgePoints(yBottomRoad, true);
     const topOuterGround = this.getClimbEdgePoints(yTopOuter, false, seamOverlap);
 
-    this.drawClimbWallRibbon(g, topOuterRaised, topRoadRaised, 0x6f6f6f);
-    this.drawClimbWallRibbon(g, topRoadRaised, bottomRoadRaised, 0x6f6f6f);
-    this.drawClimbWallRibbon(g, bottomRoadRaised, bottomOuterRaised, 0x6f6f6f);
     this.drawClimbWallRibbon(g, topOuterRaised, topOuterGround, 0x5b4e41);
+    this.drawClimbWallRibbon(g, topOuterRaised, topRoadRaised, 0x86a07b);
+    this.drawClimbWallRibbon(g, topRoadRaised, bottomRoadRaised, 0x6f6f6f);
+    this.drawClimbWallRibbon(g, bottomRoadRaised, bottomOuterRaised, 0x86a07b);
 
     g.lineStyle(2, 0x575757, 0.85);
     for (let i = 1; i < topRoadRaised.length; i += 1) {
