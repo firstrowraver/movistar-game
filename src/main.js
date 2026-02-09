@@ -796,8 +796,8 @@ class RideScene extends PhaserSceneBase {
 
     this.tileWidth = 64;
     this.tileHeight = 32;
-    this.mapWidth = 84;
-    this.mapHeight = 84;
+    this.mapWidth = 120;
+    this.mapHeight = 120;
     this.isoOriginX = (this.mapHeight * this.tileWidth) / 2 + this.tileWidth;
     this.isoOriginY = this.tileHeight * 2;
 
@@ -807,19 +807,24 @@ class RideScene extends PhaserSceneBase {
     this.sprintTimeLeft = 0;
     this.lastHudUpdateMs = 0;
 
-    const climbLength = this.mapWidth * 0.9;
+    const climbLength = this.mapWidth * 0.825;
     const leftPercent = 0.425;
     const plateauPercent = 0.15;
     const rightPercent = 0.425;
+    const approachTiles = 8;
+    const cornerRadius = 2.5;
 
     this.climb = {
       startX: (this.mapWidth - climbLength) / 2,
       endX: (this.mapWidth + climbLength) / 2,
-      centerY: this.mapHeight * 0.5,
+      centerY: this.mapHeight * 0.5 + 0.5,
       halfWidth: 3.3,
+      roadHalfWidth: 2.5,
       entryDepth: 1.35,
       entryLateralTolerance: 0.05,
       sideCollisionBuffer: 1.6,
+      renderInfluenceX: 2.4,
+      renderDepthBoost: 20000,
       maxElevation: 56 * 7,
       leftLength: climbLength * leftPercent,
       plateauLength: climbLength * plateauPercent,
@@ -827,6 +832,84 @@ class RideScene extends PhaserSceneBase {
     };
     this.climb.leftEndX = this.climb.startX + this.climb.leftLength;
     this.climb.plateauEndX = this.climb.leftEndX + this.climb.plateauLength;
+    const leftTurnX = this.climb.startX - approachTiles;
+    const rightTurnX = this.climb.endX + approachTiles;
+    this.roadSegments = [
+      { x1: 2, y1: this.climb.centerY - 16, x2: this.mapWidth - 2, y2: this.climb.centerY - 16, halfWidth: 2.5, orientation: "horizontal", centerline: true },
+      { x1: 2, y1: this.climb.centerY + 16, x2: this.mapWidth - 2, y2: this.climb.centerY + 16, halfWidth: 2.5, orientation: "horizontal", centerline: true },
+      {
+        x1: leftTurnX,
+        y1: 1.5,
+        x2: leftTurnX,
+        y2: this.climb.centerY + 2.5,
+        halfWidth: 2.5,
+        orientation: "vertical",
+        centerline: true,
+      },
+      {
+        x1: rightTurnX,
+        y1: this.climb.centerY - 2.5,
+        x2: rightTurnX,
+        y2: this.mapHeight - 1.5,
+        halfWidth: 2.5,
+        orientation: "vertical",
+        centerline: true,
+      },
+      {
+        x1: leftTurnX + cornerRadius,
+        y1: this.climb.centerY,
+        x2: this.climb.startX,
+        y2: this.climb.centerY,
+        halfWidth: 2.5,
+        orientation: "horizontal",
+        centerline: true,
+      },
+      {
+        x1: this.climb.endX,
+        y1: this.climb.centerY,
+        x2: rightTurnX - cornerRadius,
+        y2: this.climb.centerY,
+        halfWidth: 2.5,
+        orientation: "horizontal",
+        centerline: true,
+      },
+      {
+        x1: leftTurnX + cornerRadius,
+        y1: this.climb.centerY,
+        x2: leftTurnX,
+        y2: this.climb.centerY - cornerRadius,
+        halfWidth: 2.5,
+        orientation: "diag",
+        centerline: false,
+      },
+      {
+        x1: leftTurnX + cornerRadius,
+        y1: this.climb.centerY,
+        x2: leftTurnX,
+        y2: this.climb.centerY + cornerRadius,
+        halfWidth: 2.5,
+        orientation: "diag",
+        centerline: false,
+      },
+      {
+        x1: rightTurnX - cornerRadius,
+        y1: this.climb.centerY,
+        x2: rightTurnX,
+        y2: this.climb.centerY - cornerRadius,
+        halfWidth: 2.5,
+        orientation: "diag",
+        centerline: false,
+      },
+      {
+        x1: rightTurnX - cornerRadius,
+        y1: this.climb.centerY,
+        x2: rightTurnX,
+        y2: this.climb.centerY + cornerRadius,
+        halfWidth: 2.5,
+        orientation: "diag",
+        centerline: false,
+      },
+    ];
 
     this.boundSprintHandler = null;
     this.cleanupBound = false;
@@ -1376,11 +1459,15 @@ class RideScene extends PhaserSceneBase {
         const worldY = y + 0.5;
         const iso = this.toIso(x, y, false);
         const onClimb = this.isOnClimbSurface(worldX, worldY);
+        const roadInfo = onClimb ? null : this.getRoadInfoAt(worldX, worldY);
 
         let fill = 0x86a07b;
         let stroke = 0x6f8866;
 
-        if (onClimb) {
+        if (roadInfo?.onRoad) {
+          fill = 0x6f6f6f;
+          stroke = 0x575757;
+        } else if (onClimb) {
           fill = 0x819b76;
           stroke = 0x6b8563;
         }
@@ -1389,7 +1476,78 @@ class RideScene extends PhaserSceneBase {
       }
     }
 
+    this.drawFlatRoadCenterDashedLines(mapGraphics);
     mapGraphics.setDepth(-1000);
+  }
+
+  drawFlatRoadCenterDashedLines(graphics) {
+    const dashLength = 0.72;
+    const gapLength = 0.64;
+    const junctionClearRadius = 2.25;
+    const junctionPoints = this.getRoadJunctionPoints();
+    graphics.lineStyle(3, 0xf6f6ef, 0.95);
+
+    for (const segment of this.roadSegments) {
+      if (segment.centerline === false) {
+        continue;
+      }
+
+      const dx = segment.x2 - segment.x1;
+      const dy = segment.y2 - segment.y1;
+      const length = Math.hypot(dx, dy);
+      if (length <= 0.001) {
+        continue;
+      }
+
+      const ux = dx / length;
+      const uy = dy / length;
+      const edgeInset = Math.min(0.65, length * 0.2);
+      const dashStep = dashLength + gapLength;
+      const startDistance = edgeInset;
+      const endDistance = length - edgeInset;
+
+      for (let distance = startDistance; distance < endDistance; distance += dashStep) {
+        const dashEnd = Math.min(endDistance, distance + dashLength);
+        const wx1 = segment.x1 + ux * distance;
+        const wy1 = segment.y1 + uy * distance;
+        const wx2 = segment.x1 + ux * dashEnd;
+        const wy2 = segment.y1 + uy * dashEnd;
+        const midX = (wx1 + wx2) / 2;
+        const midY = (wy1 + wy2) / 2;
+        const nearJunction = junctionPoints.some((junction) => Phaser.Math.Distance.Between(midX, midY, junction.x, junction.y) < junctionClearRadius);
+        if (nearJunction) {
+          continue;
+        }
+
+        const p1 = this.toIso(wx1, wy1, false);
+        const p2 = this.toIso(wx2, wy2, false);
+        graphics.lineBetween(Math.round(p1.x), Math.round(p1.y), Math.round(p2.x), Math.round(p2.y));
+      }
+    }
+
+    graphics.lineStyle();
+  }
+
+  getRoadJunctionPoints() {
+    const tolerance = 0.08;
+    const buckets = [];
+
+    const addPoint = (x, y) => {
+      const existing = buckets.find((point) => Math.abs(point.x - x) <= tolerance && Math.abs(point.y - y) <= tolerance);
+      if (existing) {
+        existing.count += 1;
+        return;
+      }
+
+      buckets.push({ x, y, count: 1 });
+    };
+
+    for (const segment of this.roadSegments) {
+      addPoint(segment.x1, segment.y1);
+      addPoint(segment.x2, segment.y2);
+    }
+
+    return buckets.filter((point) => point.count > 1).map((point) => ({ x: point.x, y: point.y }));
   }
 
   drawClimbCenterline(graphics, isoX, isoY) {
@@ -1400,30 +1558,46 @@ class RideScene extends PhaserSceneBase {
 
   drawClimbTopOccluder() {
     const g = this.add.graphics();
-    const yTop = this.climb.centerY - this.climb.halfWidth;
-    const yBottom = this.climb.centerY + this.climb.halfWidth;
+    const yTopOuter = this.climb.centerY - this.climb.halfWidth;
+    const yBottomOuter = this.climb.centerY + this.climb.halfWidth;
+    const yTopRoad = this.climb.centerY - this.climb.roadHalfWidth;
+    const yBottomRoad = this.climb.centerY + this.climb.roadHalfWidth;
     const seamOverlap = 3;
 
-    const topRaised = this.getClimbEdgePoints(yTop, true);
-    const bottomRaised = this.getClimbEdgePoints(yBottom, true);
-    const topGround = this.getClimbEdgePoints(yTop, false, seamOverlap);
+    const topOuterRaised = this.getClimbEdgePoints(yTopOuter, true);
+    const bottomOuterRaised = this.getClimbEdgePoints(yBottomOuter, true);
+    const topRoadRaised = this.getClimbEdgePoints(yTopRoad, true);
+    const bottomRoadRaised = this.getClimbEdgePoints(yBottomRoad, true);
+    const topOuterGround = this.getClimbEdgePoints(yTopOuter, false, seamOverlap);
 
-    g.fillStyle(0x777777, 1);
-    g.beginPath();
-    g.moveTo(topRaised[0].x, topRaised[0].y);
-    for (let i = 1; i < topRaised.length; i += 1) {
-      g.lineTo(topRaised[i].x, topRaised[i].y);
-    }
-    for (let i = bottomRaised.length - 1; i >= 0; i -= 1) {
-      g.lineTo(bottomRaised[i].x, bottomRaised[i].y);
-    }
-    g.closePath();
-    g.fillPath();
+    this.drawClimbWallRibbon(g, topOuterRaised, topRoadRaised, 0x6f6f6f);
+    this.drawClimbWallRibbon(g, topRoadRaised, bottomRoadRaised, 0x6f6f6f);
+    this.drawClimbWallRibbon(g, bottomRoadRaised, bottomOuterRaised, 0x6f6f6f);
+    this.drawClimbWallRibbon(g, topOuterRaised, topOuterGround, 0x5b4e41);
 
-    this.drawClimbWallRibbon(g, topRaised, topGround, 0x5b4e41);
+    g.lineStyle(2, 0x575757, 0.85);
+    for (let i = 1; i < topRoadRaised.length; i += 1) {
+      g.lineBetween(topRoadRaised[i - 1].x, topRoadRaised[i - 1].y, topRoadRaised[i].x, topRoadRaised[i].y);
+      g.lineBetween(bottomRoadRaised[i - 1].x, bottomRoadRaised[i - 1].y, bottomRoadRaised[i].x, bottomRoadRaised[i].y);
+    }
+
+    this.drawClimbCenterDashedLine(g);
 
     g.setDepth(9600);
     this.climbTopOccluder = g;
+  }
+
+  drawClimbCenterDashedLine(graphics) {
+    const dashStep = 1.35;
+    const dashLength = 0.72;
+
+    graphics.lineStyle(3, 0xf6f6ef, 0.95);
+    for (let x = this.climb.startX + 0.8; x < this.climb.endX - 0.8; x += dashStep) {
+      const x2 = Math.min(this.climb.endX - 0.8, x + dashLength);
+      const p1 = this.toIso(x, this.climb.centerY);
+      const p2 = this.toIso(x2, this.climb.centerY);
+      graphics.lineBetween(Math.round(p1.x), Math.round(p1.y), Math.round(p2.x), Math.round(p2.y));
+    }
   }
 
   drawClimbForegroundWall() {
@@ -2467,14 +2641,13 @@ class RideScene extends PhaserSceneBase {
 
     const iso = this.toIso(entity.x, entity.y);
     entity.bubbleContainer.setPosition(iso.x, iso.y - 58);
-    const bubbleDepthBoost = this.isOnClimbSurface(entity.x, entity.y) ? 10000 : 0;
+    const bubbleDepthBoost = this.getClimbDepthBoost(entity.x, entity.y);
     entity.bubbleContainer.setDepth(iso.y + 500 + bubbleDepthBoost);
   }
 
   updateEntityDisplay(entity) {
     const iso = this.toIso(entity.x, entity.y);
-    const onClimb = this.isOnClimbSurface(entity.x, entity.y);
-    const depthBoost = onClimb ? 10000 : 0;
+    const depthBoost = this.getClimbDepthBoost(entity.x, entity.y);
 
     entity.shadow.setPosition(iso.x, iso.y + 7);
     entity.shadow.setDepth(iso.y + 3 + depthBoost);
@@ -2621,11 +2794,21 @@ class RideScene extends PhaserSceneBase {
   }
 
   isRoad(tileX, tileY) {
-    return tileX >= 0 && tileY >= 0 && tileX < this.mapWidth && tileY < this.mapHeight;
+    if (tileX < 0 || tileY < 0 || tileX >= this.mapWidth || tileY >= this.mapHeight) {
+      return false;
+    }
+
+    const worldX = tileX + 0.5;
+    const worldY = tileY + 0.5;
+    if (this.isOnClimbRoad(worldX, worldY)) {
+      return true;
+    }
+
+    return this.getRoadInfoAt(worldX, worldY).onRoad;
   }
 
   isOnLoopRoad(worldX, worldY) {
-    return this.isOnClimbSurface(worldX, worldY);
+    return this.isOnClimbRoad(worldX, worldY);
   }
 
   isInSocialHub(worldX, worldY) {
@@ -2634,6 +2817,31 @@ class RideScene extends PhaserSceneBase {
 
   isOnConnectorRoad(worldX, worldY) {
     return false;
+  }
+
+  getRoadInfoAt(worldX, worldY) {
+    let nearest = null;
+
+    for (const segment of this.roadSegments) {
+      const distance = this.distanceToSegment(worldX, worldY, segment.x1, segment.y1, segment.x2, segment.y2);
+      if (distance > segment.halfWidth) {
+        continue;
+      }
+
+      if (!nearest || distance < nearest.distance) {
+        nearest = { segment, distance };
+      }
+    }
+
+    if (!nearest) {
+      return { onRoad: false };
+    }
+
+    return {
+      onRoad: true,
+      segment: nearest.segment,
+      distance: nearest.distance,
+    };
   }
 
   distanceToSegment(px, py, x1, y1, x2, y2) {
@@ -2677,6 +2885,40 @@ class RideScene extends PhaserSceneBase {
     }
 
     return Math.abs(worldY - this.climb.centerY) <= this.climb.halfWidth + extraMargin;
+  }
+
+  isOnClimbRoad(worldX, worldY, extraMargin = 0) {
+    if (worldX < this.climb.startX || worldX > this.climb.endX) {
+      return false;
+    }
+
+    return Math.abs(worldY - this.climb.centerY) <= this.climb.roadHalfWidth + extraMargin;
+  }
+
+  getClimbRenderZone(worldX, worldY) {
+    if (this.isOnClimbSurface(worldX, worldY)) {
+      return "on-ramp";
+    }
+
+    const nearClimbX = worldX >= this.climb.startX - this.climb.renderInfluenceX && worldX <= this.climb.endX + this.climb.renderInfluenceX;
+    if (!nearClimbX) {
+      return "none";
+    }
+
+    if (worldY >= this.climb.centerY + this.climb.halfWidth) {
+      return "in-front";
+    }
+
+    if (worldY <= this.climb.centerY - this.climb.halfWidth) {
+      return "behind";
+    }
+
+    return "none";
+  }
+
+  getClimbDepthBoost(worldX, worldY) {
+    const zone = this.getClimbRenderZone(worldX, worldY);
+    return zone === "on-ramp" || zone === "in-front" ? this.climb.renderDepthBoost : 0;
   }
 
   canUseClimbEntry(worldX, worldY, radius = 0) {
